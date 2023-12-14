@@ -3,7 +3,7 @@ import pandas as pd
 import CROWDLAB_Prep
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_predict
-from CROWD_CL import confident_learning
+from CL import confident_learning
 
 # Methods 
 def train_model(labels_to_fit, x_train):
