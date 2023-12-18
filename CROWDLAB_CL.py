@@ -5,7 +5,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_predict
 from CL import confident_learning
 
-# Methods 
+# Train-model code is excerpted from DCAI course lab. 
 def train_model(labels_to_fit, x_train):
     num_crossval_folds = 10  
     model = KNeighborsClassifier(weights="distance")
@@ -19,7 +19,7 @@ def print_model_accuracy (method, pred_probs, true_labels):
     held_out_accuracy = np.mean(class_predictions == true_labels)
     print(f"Accuracy of {method} model: {held_out_accuracy}")
 
-# Majority Vote
+# Majority Vote - implemented by CLEANLAB
 def get_majority_vote_label(labels_multiannotator, num_classes, pred_probs=None, annotator_quality=None):
     """
     labels_multiannotator: Numpy
@@ -108,31 +108,31 @@ def get_majority_vote_label(labels_multiannotator, num_classes, pred_probs=None,
     return majority_vote_label.astype(int)
 
 def get_a_MLC(consensus_label: np.ndarray):
-    mlc = np.argmax(np.bincount(consensus_label))
-    a_MLC = np.mean(consensus_label == mlc)
+    mlc = np.argmax(np.bincount(consensus_label)) #Calculating the most common class in data 
+    a_MLC = np.mean(consensus_label == mlc) #Most common class accuracy compared to consensus label
     return a_MLC
 
 def get_a_m(pred_prob: np.ndarray, consensus_label: np.ndarray):
-    a_m = np.mean(np.argmax(pred_prob, axis=1) == consensus_label)
+    a_m = np.mean(np.argmax(pred_prob, axis=1) == consensus_label) #Calculating model's accruacy compared to consensus label
     return a_m
 
 def get_s_j(multiannotator_labels: np.ndarray, num_I: np.ndarray): 
-    s_j = np.zeros(multiannotator_labels.shape[1])
+    s_j = np.zeros(multiannotator_labels.shape[1]) 
     for j in range(len(s_j)):
-        annotator_labels_classes = ~np.isnan(multiannotator_labels[:, j])
-        ml = multiannotator_labels[annotator_labels_classes]
-        s_j_perclass = np.zeros(len(ml))
+        annotator_labels_classes = ~np.isnan(multiannotator_labels[:, j]) #Each annotator array Ij 
+        ml = multiannotator_labels[annotator_labels_classes] #Each annotator array Ij 
+        s_j_perclass = np.zeros(len(ml)) #Per each class that was annotated 
         total_j = 0
         for i, data in enumerate(ml):
-            non_zero_data = data[~np.isnan(data)]
-            num_non_zero = len(non_zero_data)
+            non_zero_data = data[~np.isnan(data)] #Per each class filtering out NA values 
+            num_non_zero = len(non_zero_data) 
             if num_non_zero > 1: # Meaning that there's more than current j's annotation
-                s_j_perclass[i] = (np.sum(non_zero_data == data[j]) - 1) 
-                total_j = total_j + num_non_zero - 1
+                s_j_perclass[i] = (np.sum(non_zero_data == data[j]) - 1) #inter-annotator agreement, since we are not counting the agreement from the same annotator; therefore -1.
+                total_j = total_j + num_non_zero - 1 #Calculating total sum of |J|
         if np.sum(num_I[annotator_labels_classes] - 1) == 0:
             s_j[j] = np.NaN
         else: 
-            s_j[j] = np.sum(s_j_perclass) / total_j
+            s_j[j] = np.sum(s_j_perclass) / total_j #For each annotator, setting up the value of j's inter-annotator agreement rate 
     if np.sum(np.isnan(s_j)) > 0: # If there is an annotator with no agreements, then we will assign 0
         s_j[np.isnan(s_j)] = np.NaN
     return s_j
@@ -141,8 +141,10 @@ def get_p_j(multiannotator_labels: np.ndarray, consensus_label: np.ndarray,num_I
     annotator_agreement = np.zeros(len(multiannotator_labels))
     for i, labels in enumerate(multiannotator_labels):
         annotator_agreement[i] = np.mean(labels[~np.isnan(labels)] == consensus_label[i])
-
+    #Above, calculating the annotator agreement rate for Ji 
+        
     num_P = np.mean(annotator_agreement[num_I != 1]) ## P
+    #Calculating P value, since i in I_+ using num_I != 1. 
     neq_ik = (1 - num_P) / (num_classes - 1) # (1-P) / (K-1)
     return num_P, neq_ik
 
@@ -156,20 +158,22 @@ def get_post_pred_probs(
         num_classes
 ):
     post_pred_probs = np.zeros(pred_prob.shape)
-    for i, labels in enumerate(multiannotator_labels):
-        labels_mask = ~np.isnan(labels)
+    for i, labels in enumerate(multiannotator_labels): #Looping the entire examples and re-calculating predicted probability.
+        #The main algorithm of CROWDLAB 
+        labels_mask = ~np.isnan(labels) #Filtering out non-annotated labels 
         labels_subset = labels[labels_mask]
-        post_pred_probs[i] = [
+        post_pred_probs[i] = [ 
             np.average(
                 [pred_prob[i, true_label]] + [consensus_likelihood if annotator_label == true_label else non_consensus_likelihood
                     for annotator_label in labels_subset], weights=np.concatenate(([w_M], w_j[labels_mask])),
-            )for true_label in range(num_classes)
+            )for true_label in range(num_classes) #This line of code is borrowed from the open source code.
+            #However, this is calculating the post-predicted probability of using given parameters
         ]
     return post_pred_probs
 
 def get_annotator_quality (multiannotator_labels, pred_probs, num_I, consensus_label, w_M, s_j):
-    multiannotator_labels_subset = multiannotator_labels[num_I != 1]
-    consensus_label_subset = consensus_label[num_I != 1]
+    multiannotator_labels_subset = multiannotator_labels[num_I != 1]  #I_J,+, for the whole dataset 
+    consensus_label_subset = consensus_label[num_I != 1] #I_J,+ for consensus label
     
     annotator_label_quality = np.zeros(multiannotator_labels.shape[1])
     annotator_agreement = np.zeros(multiannotator_labels_subset.shape[1])
@@ -179,7 +183,8 @@ def get_annotator_quality (multiannotator_labels, pred_probs, num_I, consensus_l
         t = labels[labels_mask].astype(int)
         t_pred = pred_probs[labels_mask]
         annotator_label_quality[j] = np.mean(t_pred[np.arange(t.shape[0]), t]) # Label-quality score "self-confidence"
-        
+        #The previous line of code is excerpted from CLEANLAB 
+
     for j in range(len(annotator_agreement)): #A_j
         labels = multiannotator_labels_subset[:, j]
         labels_mask = ~np.isnan(labels)
@@ -226,7 +231,7 @@ def run_CROWD (multiannotator_labels, num_classes, x_train, pred_prob = None, an
                                         non_consensus_likelihood, w_M, w_j, num_classes)
 
     # Creating new consensus label
-    new_consensus_label = np.full(len(consensus_label), np.nan)
+    new_consensus_label = np.full(len(consensus_label), np.nan) #These following codes idea is sourced from CLEANLAB open-source, as it was never mentioned in the paper
     for i in range (len(new_consensus_label)):
         max_prob_ind = np.where(post_pred_probs[i] == np.max(post_pred_probs[i]))[0]
         if len(max_prob_ind) == 1: new_consensus_label[i] = max_prob_ind[0]
